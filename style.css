@@ -1,0 +1,44 @@
+/* key additions to your <style> or style.css */
+
+/* Message Alignment & Spacing */
+#chatBox {
+    height: 100%;
+    /* ... other styles ... */
+    display: flex; /* Makes the chat box use flex */
+    flex-direction: column; /* Stacks messages vertically */
+}
+
+.message {
+    width: 100%;
+    margin: 10px 0;
+    display: flex; /* Important for alignment */
+}
+
+/* User Messages on the Right */
+.user-message {
+    justify-content: flex-end; /* Pushes the message bubble to the right */
+}
+
+/* Bot Messages on the Left */
+.bot-message {
+    justify-content: flex-start; /* Keeps the message bubble on the left */
+}
+
+/* Message Bubble Appearance */
+.bubble {
+    padding: 10px 15px;
+    border-radius: 20px;
+    max-width: 70%;
+    word-wrap: break-word;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+}
+
+.user-message .bubble {
+    background: #007bff; /* E.g., Blue bubble for user */
+    color: white;
+}
+
+.bot-message .bubble {
+    background: #2e2e2e; /* E.g., Dark grey bubble for bot */
+    color: white;
+}
