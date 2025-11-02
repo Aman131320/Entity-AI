@@ -1,68 +1,80 @@
-// server.js (Focus on lines 36-60 inside app.post('/api/chat', ...))
+// server.js - FINAL STABLE AND FAST CODE (Ollama Integration)
 
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fetch from 'node-fetch'; 
+
+// --- Fixes for __dirname and __filename in ES Modules ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// --- End Fixes ---
+
+const app = express();
+const PORT = process.env.PORT || 3000; 
+// CHANGE THIS to the smallest model you pulled (e.g., "phi3:mini", "gemma:2b")
+const OLLAMA_MODEL = "llama3"; 
+
+// Middleware: Standard JSON limit for text
+app.use(express.json()); 
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve the HTML file
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// API endpoint to handle chat messages
 app.post('/api/chat', async (req, res) => {
     const { message } = req.body;
+    console.log(`Incoming message: ${message}`);
 
     if (!message) {
-        return res.status(400).json({ error: "Message is required" });
+        return res.status(400).json({ error: "Message is required." });
     }
-
-    const MAX_RETRIES = 3;
-    let response;
-    
-    // --- START: Retry Loop ---
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            response = await ai.models.generateContent({
-                model: "gemini-2.5-flash", 
-                contents: message,
-                config: {
-                    maxOutputTokens: 150, 
-                    temperature: 0.7,
-                },
-            });
-
-            // If the request succeeds, break the loop
-            if (response && response.text) {
-                break;
-            }
-
-        } catch (error) {
-            console.error(`Attempt ${attempt} failed.`);
-            
-            // Check for the 503 UNAVAILABLE error
-            if (error.status === 503 && attempt < MAX_RETRIES) {
-                const waitTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
-                console.log(`Model overloaded (503). Retrying in ${waitTime / 1000}s...`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-            } else {
-                // Throw other errors (400, 403, 404, etc.) immediately
-                throw error; 
-            }
-        }
-    }
-    // --- END: Retry Loop ---
-
 
     try {
-        const replyText = response.text.trim(); // Use the response from the successful attempt
+        // --- OLLAMA API CALL (Optimized) ---
+        const response = await fetch('http://localhost:11434/api/generate', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: OLLAMA_MODEL, 
+                prompt: message,
+                max_tokens: 100,      // Limits answer length for quicker completion
+                keep_alive: -1,       // Keeps model loaded in RAM (eliminates startup delay)
+                stream: false         
+            }),
+        });
 
-        if (!replyText) {
-            console.warn('AI generated an empty response after all retries.');
-            return res.status(500).json({ error: "AI generated an empty response after all retries." });
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Ollama HTTP Error: ${response.status}. Full Error: ${errorText.substring(0, 100)}...`);
+            return res.status(500).json({ 
+                error: `Ollama Model Error: Status ${response.status}. Is model ${OLLAMA_MODEL} pulled and running?`
+            });
         }
 
-        console.log('Gemini API final response:', replyText);
+        const data = await response.json();
+        const replyText = data.response ? data.response.trim() : null;
+
+        if (!replyText) {
+            return res.status(500).json({ error: "Ollama did not generate a response." });
+        }
+
+        console.log('Ollama API final response:', replyText);
         res.json({ reply: replyText });
 
     } catch (error) {
-        console.error('Final Error after retries:', error);
-        
-        let errorMessage = "AI Service Error. The model is currently unavailable.";
-        if (error.message && error.message.includes('API key')) {
-            errorMessage = "Authentication failed. Check if your GEMINI_API_KEY is correct.";
-        }
-        
-        res.status(500).json({ error: errorMessage });
+        // This catches connection issues (ECONNREFUSED) if Ollama is not running
+        console.error('Failed to connect to Ollama:', error);
+        res.status(500).json({ 
+            error: "Connection Refused. Is Ollama running on port 11434?" 
+        });
     }
+});
+
+// Start the Express server
+app.listen(PORT, () => {
+    console.log(`Server listening at http://localhost:${PORT}. Ready for Ollama.`);
 });
